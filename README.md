@@ -117,6 +117,7 @@ python src/model_training/pretrained_inference.py
 ```
 aai-590-tinysql/
 ├── README.md
+├── Dockerfile
 ├── config/config.yaml
 ├── notebook/AAI_590_IN1_Capstone_Project.ipynb
 ├── job/gemma_job_template.yaml
