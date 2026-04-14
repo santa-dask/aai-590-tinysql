@@ -83,7 +83,6 @@ def generate_sql(question, table_schema, model, tokenizer):
     prediction = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     # Print just the generated SQL (stripping out the original prompt)
-    # Use len(sql_prompt) instead of len(prompt)
     bq_sql = prediction[len(sql_prompt) :].strip()
     #print(sql_query)
     return bq_sql
@@ -191,6 +190,6 @@ def individual_record_test(custom_sql=False):
 
 
 if __name__ == "__main__":
-    model, tokenizer = initialize_model(type="hf")
-    #process_records(file_path)
-    individual_record_test(custom_sql=True)
+    model, tokenizer = initialize_model()
+    process_records(file_path)
+    #individual_record_test(custom_sql=True)

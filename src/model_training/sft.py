@@ -21,43 +21,15 @@ from transformers import (
 )
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer, SFTConfig
-from google_cloud_mldiagnostics import machinelearning_run, metrics, metric_types
 from transformers import TrainerCallback
 
 # --- CONFIGURATION ---
-MODEL_ID = "google/gemma-2-2b"
-DATASET_ID = "cfpb_analysis" # Kept consistent with your inference script
+MODEL_ID = os.environ.get("MODEL_ID")
+DATASET_ID = os.environ.get("DATASET_ID")
 OUTPUT_DIR = "./gemma-2-2b-sql-finetuned"
+GCS_BUCKET = os.environ.get("GCS_BUCKET")
 HUGGINGFACE_TOKEN = os.environ.get("HF_TOKEN") # Ensure your token is set for Gemma access
 
-
-# --- 1. INITIALIZE THE ML DIAGNOSTICS RUN ---
-"""
-print("Initializing Google Cloud ML Diagnostics...")
-run = machinelearning_run(
-    name="gemma-2-sql-sft-run1",
-    project="gpu-launchpad-playground",
-    region="us-central1",                        # ⚠️ Parameter is 'region', not 'location'
-    configs={
-        "model_id": MODEL_ID,
-        "max_length": 1024,
-        "batch_size": 2,
-        "learning_rate": 2e-4
-    }
-)
-"""
-
-
-# --- 2. CREATE A HUGGING FACE CALLBACK ---
-class GCPDiagnosticsCallback(TrainerCallback):
-    """Pulls logs from SFTTrainer and pushes them to GCP ML Diagnostics"""
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        if logs:
-            # The SDK uses metrics.record() with predefined MetricTypes
-            if "loss" in logs:
-                metrics.record(metric_types.MetricType.LOSS, logs["loss"], step=state.global_step)
-            if "learning_rate" in logs:
-                metrics.record(metric_types.MetricType.LEARNING_RATE, logs["learning_rate"], step=state.global_step)
 
 # --- 1. DATA PROCESSING ---
 print("Loading and formatting dataset...")
@@ -77,25 +49,25 @@ def format_instruction(example):
 
     # Notice this exactly mirrors your generate_sql() structure
     text = f"""<start_of_turn>user
-You are a GoogleSQL expert. Generate a BigQuery query to answer the question using the schema below.
-Rules:
-1. Use ONLY the table and columns provided in the schema.
-2. Prefix all table names with `{DATASET_ID}.`.
-3. Return ONLY the SQL query.
+    You are a GoogleSQL expert. Generate a BigQuery query to answer the question using the schema below.
+    Rules:
+    1. Use ONLY the table and columns provided in the schema.
+    2. Prefix all table names with `{DATASET_ID}.`.
+    3. Return ONLY the SQL query.
 
-Schema:
-{schema}
+    Schema:
+      {schema}
 
-Question:
-{prompt}<end_of_turn>
-<start_of_turn>model
-SQL:{target_sql}<end_of_turn>"""
+    Question:
+      {prompt}
+    <end_of_turn>
+    <start_of_turn>model
+    SQL:{target_sql}<end_of_turn>"""
 
     return {"text": text}
 
 # Apply formatting and shuffle
-# For this example, we take a subset to test the pipeline quickly. Remove the select() for a full run.
-PROCESSED_DATA_CACHE_DIR = "/gcs/cfpb-raw-lake-sdk/data/processed_dataset_cache_splits"
+PROCESSED_DATA_CACHE_DIR = f"/gcs/{GCS_BUCKET}/data/processed_dataset_cache_splits"
 
 if os.path.exists(PROCESSED_DATA_CACHE_DIR):
     print(f"Loading preprocessed dataset splits from cache: {PROCESSED_DATA_CACHE_DIR}")
@@ -185,7 +157,6 @@ trainer = SFTTrainer(
     eval_dataset=val_dataset,
     args=training_args,
     processing_class=tokenizer
-    #callbacks=[GCPDiagnosticsCallback()] # 👈 Inject your GCP callback here
 )
 
 # --- 4. EXECUTE TRAINING ---
